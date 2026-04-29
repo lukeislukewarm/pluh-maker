@@ -16,56 +16,88 @@ st.markdown("# pluh maker")
 st.write("choose a midi file or paste a MuseScore link to turn it into pluh")
 
 
-def download_midi_from_musescore(url: str) -> str:
-    temp_dir = tempfile.mkdtemp()
+def get_musescore_url_variants(url: str):
+    clean_url = url.strip().split("?")[0]
 
-    command = [
-        "npx",
-        "dl-librescore@latest",
-        "-i",
-        url.strip(),
-        "-t",
-        "midi",
-        "-o",
-        temp_dir,
-    ]
+    urls = [clean_url]
 
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-    )
+    if "/scores/" in clean_url:
+        score_id = clean_url.split("/scores/")[-1].split("/")[0]
+        urls.append(f"https://musescore.com/score/{score_id}")
 
-    st.write("Download folder:")
-    st.code(temp_dir)
+    elif "/score/" in clean_url:
+        score_id = clean_url.split("/score/")[-1].split("/")[0]
+        urls.append(f"https://musescore.com/user/0/scores/{score_id}")
 
-    st.write("dl-librescore output:")
-    st.code(result.stdout + "\n" + result.stderr)
+    return list(dict.fromkeys(urls))
 
-    all_files = glob.glob(os.path.join(temp_dir, "**", "*"), recursive=True)
 
-    st.write("Files found:")
-    st.write(all_files)
+def find_midi_file(folder: str):
+    all_files = glob.glob(os.path.join(folder, "**", "*"), recursive=True)
 
     midi_files = [
         f for f in all_files
         if os.path.isfile(f) and f.lower().endswith((".mid", ".midi"))
     ]
 
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr or result.stdout)
+    return midi_files, all_files
 
-    if not midi_files:
-        raise FileNotFoundError("No MIDI file was downloaded.")
 
-    return midi_files[0]
+def download_midi_from_musescore(url: str) -> str:
+    url_variants = get_musescore_url_variants(url)
+
+    st.write("Trying these MuseScore URLs:")
+    st.write(url_variants)
+
+    last_output = ""
+
+    for fixed_url in url_variants:
+        temp_dir = tempfile.mkdtemp()
+
+        command = [
+            "npx",
+            "dl-librescore@latest",
+            "-i",
+            fixed_url,
+            "-t",
+            "midi",
+            "-o",
+            temp_dir,
+        ]
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+        )
+
+        output = result.stdout + "\n" + result.stderr
+        last_output = output
+
+        st.write("Tried URL:")
+        st.code(fixed_url)
+
+        st.write("dl-librescore output:")
+        st.code(output)
+
+        midi_files, all_files = find_midi_file(temp_dir)
+
+        st.write("Files found:")
+        st.write(all_files)
+
+        if midi_files:
+            return midi_files[0]
+
+    raise FileNotFoundError(
+        "No MIDI file was downloaded. Last dl-librescore output:\n" + last_output
+    )
 
 
 uploaded_midi = st.file_uploader("upload midi", type=["mid", "midi"])
 
 musescore_url = st.text_input(
     "or paste a MuseScore link",
-    placeholder="https://musescore.com/..."
+    placeholder="https://musescore.com/user/123456/scores/12345678"
 )
 
 if uploaded_midi or musescore_url:
