@@ -23,7 +23,7 @@ def download_midi_from_musescore(url: str) -> str:
         "npx",
         "dl-librescore@latest",
         "-i",
-        url,
+        url.strip(),
         "-t",
         "midi",
         "-o",
@@ -36,13 +36,24 @@ def download_midi_from_musescore(url: str) -> str:
         text=True,
     )
 
+    st.write("Download folder:")
+    st.code(temp_dir)
+
+    st.write("dl-librescore output:")
+    st.code(result.stdout + "\n" + result.stderr)
+
+    all_files = glob.glob(os.path.join(temp_dir, "**", "*"), recursive=True)
+
+    st.write("Files found:")
+    st.write(all_files)
+
+    midi_files = [
+        f for f in all_files
+        if os.path.isfile(f) and f.lower().endswith((".mid", ".midi"))
+    ]
+
     if result.returncode != 0:
         raise RuntimeError(result.stderr or result.stdout)
-
-    midi_files = glob.glob(os.path.join(temp_dir, "*.mid"))
-
-    if not midi_files:
-        midi_files = glob.glob(os.path.join(temp_dir, "**", "*.mid"), recursive=True)
 
     if not midi_files:
         raise FileNotFoundError("No MIDI file was downloaded.")
